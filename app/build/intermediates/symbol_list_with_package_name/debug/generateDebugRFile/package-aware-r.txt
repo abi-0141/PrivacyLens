@@ -1,0 +1,2 @@
+com.privacylens.app
+style Theme_PrivacyLens
