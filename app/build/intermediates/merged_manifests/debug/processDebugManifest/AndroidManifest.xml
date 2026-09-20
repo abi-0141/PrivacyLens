@@ -27,6 +27,7 @@
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
+        android:icon="@drawable/privacy_lens_logo"
         android:label="PrivacyLens"
         android:supportsRtl="true"
         android:theme="@style/Theme.PrivacyLens" >

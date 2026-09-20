@@ -1,1 +1,5 @@
+int color privacy_lens_icon_background 0x0
+int drawable ic_privacy_lens_foreground 0x0
+int drawable ic_privacy_lens_mark 0x0
+int drawable privacy_lens_logo 0x0
 int style Theme_PrivacyLens 0x0

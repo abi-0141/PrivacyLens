@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-debug-33:/drawable_ic_privacy_lens_foreground.xml.flat",
+        "source": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-main-35:/drawable/ic_privacy_lens_foreground.xml"
+    },
+    {
+        "merged": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-debug-33:/drawable_ic_privacy_lens_mark.xml.flat",
+        "source": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-main-35:/drawable/ic_privacy_lens_mark.xml"
+    },
+    {
+        "merged": "com.privacylens.app-debug-33:/drawable_privacy_lens_logo.png.flat",
+        "source": "com.privacylens.app-main-35:/drawable/privacy_lens_logo.png"
+    },
+    {
+        "merged": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-debug-33:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/home/codespace/.gradle/daemon/9.7.1/com.privacylens.app-main-35:/mipmap-anydpi-v26/ic_launcher.xml"
+    }
+]

@@ -1,2 +1,6 @@
 com.privacylens.app
+color privacy_lens_icon_background
+drawable ic_privacy_lens_foreground
+drawable ic_privacy_lens_mark
+drawable privacy_lens_logo
 style Theme_PrivacyLens
