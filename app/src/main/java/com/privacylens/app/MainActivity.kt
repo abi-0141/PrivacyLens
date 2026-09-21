@@ -1,5 +1,12 @@
 package com.privacylens.app
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -11,6 +18,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -176,6 +184,14 @@ fun PrivacyLensApp(
         mutableStateOf("")
     }
 
+    var appFilter by remember {
+        mutableStateOf("ALL")
+    }
+
+    var appFilterMenuExpanded by remember {
+        mutableStateOf(false)
+    }
+
     var loading by remember {
         mutableStateOf(true)
     }
@@ -209,15 +225,20 @@ fun PrivacyLensApp(
         return
     }
 
-    val filteredApps = remember(apps, searchQuery) {
-        if (searchQuery.isBlank()) {
-            apps
-        } else {
-            apps.filter {
+    val filteredApps = remember(apps, searchQuery, appFilter) {
+        apps
+            .filter {
+                when (appFilter) {
+                    "USER" -> !it.isSystemApp
+                    "SYSTEM" -> it.isSystemApp
+                    else -> true
+                }
+            }
+            .filter {
+                searchQuery.isBlank() ||
                 it.name.contains(searchQuery, ignoreCase = true) ||
                 it.packageName.contains(searchQuery, ignoreCase = true)
             }
-        }
     }
 
     Surface(
@@ -330,13 +351,18 @@ fun PrivacyLensApp(
                         Spacer(modifier = Modifier.height(5.dp))
 
                         Text(
-                            text = if (loading) {
-                                "Analyzing installed apps..."
-                            } else {
-                                "${apps.size} launchable applications"
-                            },
+                            text = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        Text(
+                            text = "Android ${android.os.Build.VERSION.RELEASE}  •  Security Patch ${android.os.Build.VERSION.SECURITY_PATCH}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
                         )
                     }
 
@@ -466,17 +492,50 @@ fun StatusDot(
     active: Boolean
 ) {
 
+    val transition = rememberInfiniteTransition(
+        label = "rgbStatusLed"
+    )
+
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 6000,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rgbProgress"
+    )
+
+    val hue = progress * 360f
+
+    val breathing = (
+        0.65f +
+            0.35f * (
+                0.5f +
+                    0.5f * kotlin.math.sin(
+                        progress * Math.PI * 4
+                    ).toFloat()
+            )
+        )
+
+    val ledColor = if (active) {
+        Color.hsv(
+            hue = hue,
+            saturation = 0.9f,
+            value = breathing
+        )
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Box(
         modifier = Modifier
             .size(10.dp)
             .clip(CircleShape)
-            .background(
-                if (active) {
-                    MaterialTheme.colorScheme.secondary
-                } else {
-                    MaterialTheme.colorScheme.tertiary
-                }
-            )
+            .background(ledColor)
     )
 }
 
@@ -539,8 +598,10 @@ fun AppRow(
             )
         }
     }
-}
 
+
+
+}
 @Composable
 fun AppDetailsScreen(
     app: AppInfo,
@@ -618,6 +679,22 @@ fun AppDetailsScreen(
         it.granted
     }
 
+    val riskResult = PrivacyRiskEngine.analyze(
+        permissions = permissions,
+        isSystemApp = app.isSystemApp
+    )
+
+    var permissionFilter by remember {
+        mutableStateOf("ALL")
+    }
+
+    val filteredPermissions = when (permissionFilter) {
+        "SENSITIVE" -> sensitive
+        "GRANTED" -> sensitive.filter { it.granted }
+        "OTHER" -> other
+        else -> emptyList()
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -690,8 +767,16 @@ fun AppDetailsScreen(
                         ) {
 
                             Text(
-                                text = "APPLICATION",
-                                color = MaterialTheme.colorScheme.primary,
+                                text = if (app.isSystemApp) {
+                                    "SYSTEM APP"
+                                } else {
+                                    "USER APP"
+                                },
+                                color = if (app.isSystemApp) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp
@@ -776,90 +861,136 @@ fun AppDetailsScreen(
                             grantedSensitive = grantedSensitive,
                             otherCount = permissions.size -
                                 sensitive.size -
-                                special.size
+                                special.size,
+                            riskResult = riskResult,
+                            selectedFilter = permissionFilter,
+                            onFilterSelected = {
+                                permissionFilter = it
+                                showAll = false
+                            }
                         )
                     }
 
-                    if (sensitive.isNotEmpty()) {
+                    if (permissionFilter != "ALL") {
 
                         item {
                             SectionHeader(
-                                title = "SENSITIVE ACCESS",
-                                count = sensitive.size
-                            )
-                        }
-
-                        items(
-                            items = sensitive,
-                            key = {
-                                it.permission
-                            }
-                        ) {
-                            PermissionRow(it)
-                        }
-                    }
-
-                    if (special.isNotEmpty()) {
-
-                        item {
-                            SectionHeader(
-                                title = "SPECIAL ACCESS",
-                                count = special.size
-                            )
-                        }
-
-                        items(
-                            items = special,
-                            key = {
-                                it.permission
-                            }
-                        ) {
-                            PermissionRow(it)
-                        }
-                    }
-
-                    item {
-
-                        Button(
-                            onClick = {
-                                showAll = !showAll
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(13.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Text(
-                                text = if (showAll) {
-                                    "HIDE OTHER PERMISSIONS"
-                                } else {
-                                    "SHOW ALL ${permissions.size} PERMISSIONS"
+                                title = when (permissionFilter) {
+                                    "SENSITIVE" -> "SENSITIVE ACCESS"
+                                    "GRANTED" -> "GRANTED ACCESS"
+                                    "OTHER" -> "OTHER DECLARED ACCESS"
+                                    else -> "PERMISSIONS"
                                 },
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp
-                            )
-                        }
-                    }
-
-                    if (showAll) {
-
-                        item {
-                            SectionHeader(
-                                title = "OTHER DECLARED ACCESS",
-                                count = other.size
+                                count = filteredPermissions.size
                             )
                         }
 
                         items(
-                            items = other,
+                            items = filteredPermissions,
                             key = {
                                 it.permission
                             }
                         ) {
                             PermissionRow(it)
+                        }
+
+                        if (filteredPermissions.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No permissions in this category.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(
+                                        horizontal = 8.dp,
+                                        vertical = 18.dp
+                                    )
+                                )
+                            }
+                        }
+
+                    } else {
+
+                        if (sensitive.isNotEmpty()) {
+
+                            item {
+                                SectionHeader(
+                                    title = "SENSITIVE ACCESS",
+                                    count = sensitive.size
+                                )
+                            }
+
+                            items(
+                                items = sensitive,
+                                key = {
+                                    it.permission
+                                }
+                            ) {
+                                PermissionRow(it)
+                            }
+                        }
+
+                        if (special.isNotEmpty()) {
+
+                            item {
+                                SectionHeader(
+                                    title = "SPECIAL ACCESS",
+                                    count = special.size
+                                )
+                            }
+
+                            items(
+                                items = special,
+                                key = {
+                                    it.permission
+                                }
+                            ) {
+                                PermissionRow(it)
+                            }
+                        }
+
+                        item {
+
+                            Button(
+                                onClick = {
+                                    showAll = !showAll
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(13.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text(
+                                    text = if (showAll) {
+                                        "HIDE OTHER PERMISSIONS"
+                                    } else {
+                                        "SHOW ALL ${permissions.size} PERMISSIONS"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                        }
+
+                        if (showAll) {
+
+                            item {
+                                SectionHeader(
+                                    title = "OTHER DECLARED ACCESS",
+                                    count = other.size
+                                )
+                            }
+
+                            items(
+                                items = other,
+                                key = {
+                                    it.permission
+                                }
+                            ) {
+                                PermissionRow(it)
+                            }
                         }
                     }
 
@@ -876,7 +1007,10 @@ fun AppDetailsScreen(
 fun PrivacySummary(
     sensitiveCount: Int,
     grantedSensitive: Int,
-    otherCount: Int
+    otherCount: Int,
+    riskResult: PrivacyRiskResult,
+    selectedFilter: String,
+    onFilterSelected: (String) -> Unit
 ) {
 
     Card(
@@ -917,16 +1051,33 @@ fun PrivacySummary(
                     )
                 }
 
-                Text(
-                    text = "$grantedSensitive / $sensitiveCount",
-                    color = if (grantedSensitive > 0) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.secondary
-                    },
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = riskResult.score.toString(),
+                        color = when (riskResult.level) {
+                            PrivacyRiskLevel.LOW ->
+                                MaterialTheme.colorScheme.secondary
+                            PrivacyRiskLevel.MODERATE ->
+                                MaterialTheme.colorScheme.tertiary
+                            PrivacyRiskLevel.HIGH ->
+                                Color(0xFFFF9800)
+                            PrivacyRiskLevel.VERY_HIGH ->
+                                Color(0xFFFF5252)
+                        },
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = riskResult.level.name.replace("_", " "),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(15.dp))
@@ -945,20 +1096,78 @@ fun PrivacySummary(
                 Metric(
                     label = "SENSITIVE",
                     value = sensitiveCount.toString(),
-                    color = MaterialTheme.colorScheme.tertiary
+                    color = MaterialTheme.colorScheme.tertiary,
+                    selected = selectedFilter == "SENSITIVE",
+                    onClick = {
+                        onFilterSelected(
+                            if (selectedFilter == "SENSITIVE") "ALL" else "SENSITIVE"
+                        )
+                    }
                 )
 
                 Metric(
                     label = "GRANTED",
                     value = grantedSensitive.toString(),
-                    color = MaterialTheme.colorScheme.secondary
+                    color = MaterialTheme.colorScheme.secondary,
+                    selected = selectedFilter == "GRANTED",
+                    onClick = {
+                        onFilterSelected(
+                            if (selectedFilter == "GRANTED") "ALL" else "GRANTED"
+                        )
+                    }
                 )
 
                 Metric(
                     label = "OTHER",
                     value = otherCount.toString(),
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    selected = selectedFilter == "OTHER",
+                    onClick = {
+                        onFilterSelected(
+                            if (selectedFilter == "OTHER") "ALL" else "OTHER"
+                        )
+                    }
                 )
+            }
+
+            if (riskResult.reasons.isNotEmpty()) {
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "WHY THIS SCORE",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.3.sp
+                )
+
+                Spacer(modifier = Modifier.height(7.dp))
+
+                riskResult.reasons.take(4).forEach { reason ->
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "•",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.width(7.dp))
+
+                        Text(
+                            text = reason,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -977,10 +1186,26 @@ fun PrivacySummary(
 fun Metric(
     label: String,
     value: String,
-    color: Color
+    color: Color,
+    selected: Boolean = false,
+    onClick: () -> Unit = {}
 ) {
 
     Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    Color.Transparent
+                }
+            )
+            .padding(
+                horizontal = 14.dp,
+                vertical = 7.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 

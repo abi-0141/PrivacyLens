@@ -26,7 +26,10 @@ object AppScanner {
                     AppInfo(
                         name = packageManager.getApplicationLabel(app).toString(),
                         packageName = app.packageName,
-                        icon = icon.toBitmap()
+                        icon = icon.toBitmap(),
+                        isSystemApp = (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
+                        isUpdatedSystemApp =
+                            (app.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                     )
                 }
                 .sortedBy { it.name.lowercase() }
